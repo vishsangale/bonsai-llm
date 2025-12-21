@@ -66,7 +66,7 @@ def process_tinyshakespeare(dataset_name, tokenizer_path):
     
     print(f"Saved to {output_dir}")
 
-def process_fineweb(dataset_name, tokenizer_path):
+def process_fineweb(dataset_name, tokenizer_path, sample_limit):
     print(f"Processing FineWeb ({dataset_name})...")
     # For FineWeb, we stream directly from HF instead of downloading a raw file first
     from datasets import load_dataset
@@ -75,11 +75,17 @@ def process_fineweb(dataset_name, tokenizer_path):
     output_dir = os.path.join(MODEL_DATASETS_DIR, dataset_name)
     os.makedirs(output_dir, exist_ok=True)
     
-    # Check if files already exist
-    if os.path.exists(os.path.join(output_dir, 'train.bin')) and os.path.exists(os.path.join(output_dir, 'val.bin')):
-        print(f"FineWeb binaries already exist in {output_dir}. Skipping.")
-        return
-
+    # Check if files already exist - removing check to allow overwriting/extending if needed, 
+    # or better: we should probably clear or overwrite if user asks. 
+    # For now, let's just assume if we run this we want to regenerate/extend?
+    # Actually, if I want to just add more data, appending is risky if I don't know where I left off.
+    # Simple approach: Overwrite if running "prepare".
+    # But wait, existing logic checked existence.
+    # if os.path.exists(os.path.join(output_dir, 'train.bin')) and os.path.exists(os.path.join(output_dir, 'val.bin')):
+    #    print(f"FineWeb binaries already exist in {output_dir}. Skipping.")
+    #    return
+    # I will remove this check so we can regenerate with new limit.
+    
     print(f"Loading tokenizer: {tokenizer_path}")
     try:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
@@ -95,18 +101,10 @@ def process_fineweb(dataset_name, tokenizer_path):
     print(f"Streaming {hf_dataset_name} ({hf_subset})...")
     ds = load_dataset(hf_dataset_name, name=hf_subset, split="train", streaming=True)
     
-    # We will assume a simple split: first X tokens for val, rest for train
-    # Or to ensure diversity, every Nth sample.
-    # Given it's streaming, let's just grab enough data for a "bonsai" model.
-    # Let's target ~100M tokens for this example? Or just let it run until user stops?
-    # Better: process for a fixed amount or all of it. sample-10BT is 10B tokens, which is huge for local.
-    # Let's implement a limit or just process a chunk. 
-    # Current implementation: Process 100k samples.
-    
     train_file = os.path.join(output_dir, 'train.bin')
     val_file = os.path.join(output_dir, 'val.bin')
     
-    # Clean files
+    # Clean files (Overwrite)
     open(train_file, 'wb').close()
     open(val_file, 'wb').close()
     
@@ -120,7 +118,7 @@ def process_fineweb(dataset_name, tokenizer_path):
     # Validation ratio: 1/100
     val_ratio = 100
     
-    limit_samples = 500 # Enough for verification and small training
+    limit_samples = sample_limit
     print(f"Processing up to {limit_samples} samples...")
 
     for i, entry in tqdm(enumerate(ds)):
@@ -164,11 +162,11 @@ def process_fineweb(dataset_name, tokenizer_path):
         
     print(f"Saved {train_tokens_count} train tokens, {val_tokens_count} val tokens to {output_dir}")
 
-def prepare_dataset(dataset_name, tokenizer_path):
+def prepare_dataset(dataset_name, tokenizer_path, sample_limit):
     if dataset_name == 'tinyshakespeare':
         process_tinyshakespeare(dataset_name, tokenizer_path)
     elif dataset_name == 'fineweb':
-        process_fineweb(dataset_name, tokenizer_path)
+        process_fineweb(dataset_name, tokenizer_path, sample_limit)
     else:
         print(f"Dataset {dataset_name} not implemented for Gemma-3 yet.")
 
@@ -176,9 +174,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Prepare data for Gemma-3')
     parser.add_argument('--dataset', type=str, required=True, choices=['tinyshakespeare', 'fineweb'], help='Dataset to process')
     parser.add_argument('--tokenizer_path', type=str, default="google/gemma-3-1b-pt", help='Path to tokenizer')
+    parser.add_argument('--sample_limit', type=int, default=500, help='Number of samples to process from FineWeb')
     
     args = parser.parse_args()
-    prepare_dataset(args.dataset, args.tokenizer_path)
+    prepare_dataset(args.dataset, args.tokenizer_path, args.sample_limit)
 
     # Flush buffers and force exit to avoid PyGILState_Release errors with some libraries
     sys.stdout.flush()

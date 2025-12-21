@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 # Fix for CUDA memory fragmentation
-os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Add parent dir to path to import config/model
 # Add parent dir to path to import data_pipeline
