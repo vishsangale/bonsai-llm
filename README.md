@@ -1,13 +1,55 @@
 # Small LLMs Lab
 
-A laboratory for training small Language Models (LLMs) from scratch.
+A laboratory for training small Language Models (LLMs) from scratch. This project currently features a custom implementation of the Gemma 3 architecture.
 
 ## Project Structure
 
-- **`gemma-3/`**: Contains code and configuration for the Gemma 3 model.
-- **`data_pipeline/`**: Scripts for data downloading, loading, preprocessing, and cleaning.
-- **`datasets/`**: Directory for storing local datasets (ignored by git).
+- **`gemma-3/`**: Implementation of the Gemma 3 model, configuration, and training loop.
+- **`data_pipeline/`**: Scripts for fetching and processing datasets (currently TinyShakespeare).
+- **`datasets/`**: Directory where downloaded datasets are stored.
+- **`experiments/`**: Stores training logs (TensorBoard) and model checkpoints.
 
 ## Getting Started
 
-(TODO: Add getting started instructions)
+### Prerequisites
+
+Ensure you have Python 3.8+ and a virtual environment set up.
+
+Dependencies:
+- `torch`
+- `transformers`
+- `numpy`
+- `requests`
+- `tqdm`
+- `tensorboard`
+
+### Installation
+
+1. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install torch transformers numpy requests tqdm tensorboard
+   ```
+
+### Running the Project
+
+1. **Download the Data**:
+   ```bash
+   python data_pipeline/tinyshakespeare.py
+   ```
+
+2. **Start Training**:
+   ```bash
+   python gemma-3/train.py
+   ```
+
+3. **Monitor Progress**:
+   Open a new terminal, activate the environment, and run TensorBoard:
+   ```bash
+   tensorboard --logdir experiments
+   ```
