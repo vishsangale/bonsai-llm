@@ -22,7 +22,6 @@ Dependencies:
 - `requests`
 - `tqdm`
 - `tensorboard`
-- `tiktoken`
 - `datasets`
 
 ### Installation
@@ -35,23 +34,50 @@ Dependencies:
 
 2. Install dependencies:
    ```bash
-   pip install torch transformers numpy requests tqdm tensorboard tiktoken datasets
+   pip install torch transformers numpy requests tqdm tensorboard datasets
    ```
 
 ### Running the Project
-
-1. **Prepare the Data**:
-   ```bash
-   python data_pipeline/prepare_data.py --dataset tinyshakespeare
-   ```
-
-2. **Start Training**:
-   ```bash
-   python gemma-3/train.py
-   ```
-
-3. **Monitor Progress**:
-   Open a new terminal, activate the environment, and run TensorBoard:
-   ```bash
-   tensorboard --logdir experiments
-   ```
+ 
+ 1. **Data Preparation**:
+    The pipeline is split into downloading raw data and preparing model-specific tokenized datasets.
+ 
+    **a. TinyShakespeare**
+    ```bash
+    # 1. Download raw data
+    python data_pipeline/prepare_data.py --dataset tinyshakespeare
+    
+    # 2. Tokenize for Gemma-3
+    python gemma-3/prepare_data.py --dataset tinyshakespeare
+    ```
+ 
+    **b. FineWeb (Edu)**
+    ```bash
+    # Stream and tokenize directly (no separate download step needed)
+    python gemma-3/prepare_data.py --dataset fineweb
+    ```
+ 
+ 2. **Start Training**:
+    Run the training script. You can override any configuration parameter via CLI.
+ 
+    **Basic Run (`tinyshakespeare`)**:
+    ```bash
+    python gemma-3/train.py
+    ```
+ 
+    **FineWeb Run**:
+    ```bash
+    python gemma-3/train.py --dataset.dataset_name=fineweb
+    ```
+ 
+    **Advanced CLI Usage**:
+    Override any config field using `--section.key=value` syntax.
+    ```bash
+    python gemma-3/train.py --training.batch_size=4 --training.max_steps=5000 --model.gradient_checkpointing=False
+    ```
+ 
+ 3. **Monitor Progress**:
+    Open a new terminal, activate the environment, and run TensorBoard:
+    ```bash
+    tensorboard --logdir experiments
+    ```
