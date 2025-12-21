@@ -37,13 +37,13 @@ class TrainingConfig:
     logging_steps: int = 10
     eval_steps: int = 50
     save_steps: int = 10
-    output_dir: str = "experiments/gemma-3/tinyshakespeare/baseline"
+    output_dir: Optional[str] = None
     device: str = "cuda"
 
 @dataclass
 class DatasetConfig:
     dataset_name: str = "tinyshakespeare"
-    dataset_path: str = "data/tinyshakespeare"
+    dataset_path: Optional[str] = None
     tokenizer_path: str = "google/gemma-3-1b-pt" # User requested tokenizer path
     seq_length: int = 1024
 

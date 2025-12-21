@@ -22,6 +22,8 @@ Dependencies:
 - `requests`
 - `tqdm`
 - `tensorboard`
+- `tiktoken`
+- `datasets`
 
 ### Installation
 
@@ -33,14 +35,14 @@ Dependencies:
 
 2. Install dependencies:
    ```bash
-   pip install torch transformers numpy requests tqdm tensorboard
+   pip install torch transformers numpy requests tqdm tensorboard tiktoken datasets
    ```
 
 ### Running the Project
 
-1. **Download the Data**:
+1. **Prepare the Data**:
    ```bash
-   python data_pipeline/tinyshakespeare.py
+   python data_pipeline/prepare_data.py --dataset tinyshakespeare
    ```
 
 2. **Start Training**:

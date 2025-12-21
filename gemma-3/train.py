@@ -3,6 +3,10 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer
 import os
 import sys
+import numpy as np
+
+# Fix for CUDA memory fragmentation
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 # Add parent dir to path to import config/model
 # Add parent dir to path to import data_pipeline
@@ -16,37 +20,78 @@ except ImportError:
     from config import Gemma3Config
     from model import Gemma3ForCausalLM
 
-from data_pipeline.tinyshakespeare import read_tinyshakespeare
+# DATASETS_DIR
+DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datasets', 'gemma-3')
 
-class TextDataset(Dataset):
-    def __init__(self, text, tokenizer, seq_length):
-        self.tokenizer = tokenizer
+class PretokenizedDataset(Dataset):
+    def __init__(self, bin_path, seq_length):
         self.seq_length = seq_length
-        self.tokens = tokenizer.encode(text, add_special_tokens=False)
-        # Convert to tensor immediately
-        self.tokens = torch.tensor(self.tokens, dtype=torch.long)
+        # Load memory mapped
+        # Check if file exists
+        if not os.path.exists(bin_path):
+             raise FileNotFoundError(f"Dataset file not found: {bin_path}")
+        
+        self.tokens = np.memmap(bin_path, dtype=np.uint32, mode='r')
+        self.num_chunks = len(self.tokens) // self.seq_length
 
     def __len__(self):
-        return len(self.tokens) // self.seq_length
+        return self.num_chunks
 
     def __getitem__(self, idx):
         start = idx * self.seq_length
         end = start + self.seq_length
+        
+        # Get chunk (numpy array)
         chunk = self.tokens[start:end]
         
-        if len(chunk) < self.seq_length:
-             # Padding or repeat logic
-             return self.__getitem__(0)
-
-        input_ids = chunk
-        labels = chunk
+        # Convert to tensor (int64/long for torch)
+        # Copy is necessary because memmap is not writeable and torch might want to own memory or just casting
+        input_ids = torch.from_numpy(chunk.astype(np.int64))
+        labels = input_ids.clone()
 
         return {"input_ids": input_ids, "labels": labels}
 
 from torch.utils.tensorboard import SummaryWriter
 
+def parse_args(config):
+    # Very simple generic arg parser for --key=value
+    # Supports nested keys like --training.batch_size=4
+    import sys
+    
+    for arg in sys.argv[1:]:
+        if arg.startswith('--') and '=' in arg:
+            key_full, value_str = arg[2:].split('=', 1)
+            
+            # Traverse config to find the leaf attribute
+            keys = key_full.split('.')
+            obj = config
+            try:
+                # Go down to parent object
+                for k in keys[:-1]:
+                    obj = getattr(obj, k)
+                
+                leaf_key = keys[-1]
+                # Get current value to infer type
+                current_val = getattr(obj, leaf_key)
+                target_type = type(current_val)
+                
+                # Cast value
+                if target_type == bool:
+                    new_val = value_str.lower() in ('true', '1', 'yes', 'on')
+                else:
+                    new_val = target_type(value_str)
+                    
+                print(f"Config override: {key_full} = {new_val} (was {current_val})")
+                setattr(obj, leaf_key, new_val)
+                
+            except AttributeError:
+                print(f"Warning: Config key '{key_full}' not found. Ignoring.")
+            except ValueError:
+                print(f"Warning: Could not cast '{value_str}' to type {target_type} for key '{key_full}'. Ignoring.")
+
 def train():
     config = Gemma3Config()
+    parse_args(config)
     device = torch.device(config.training.device if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -62,11 +107,31 @@ def train():
         config.model.vocab_size = tokenizer.vocab_size
 
     # Load Data
-    train_text = read_tinyshakespeare(split='train')
-    val_text = read_tinyshakespeare(split='val')
+    # Resolve dataset directory. 
+    if config.dataset.dataset_path:
+        # If absolute, use as is. If relative, assume relative to project root.
+        if os.path.isabs(config.dataset.dataset_path):
+            dataset_dir = config.dataset.dataset_path
+        else:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            dataset_dir = os.path.join(project_root, config.dataset.dataset_path)
+    else:
+        # Generate automatically based on dataset_name
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        dataset_dir = os.path.join(project_root, 'datasets', 'gemma-3', config.dataset.dataset_name)
     
-    dataset = TextDataset(train_text, tokenizer, config.dataset.seq_length)
-    val_dataset = TextDataset(val_text, tokenizer, config.dataset.seq_length)
+    train_path = os.path.join(dataset_dir, 'train.bin')
+    val_path = os.path.join(dataset_dir, 'val.bin')
+    
+    print(f"Loading datasets from {dataset_dir}...")
+    
+    try:
+        dataset = PretokenizedDataset(train_path, config.dataset.seq_length)
+        val_dataset = PretokenizedDataset(val_path, config.dataset.seq_length)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        print(f"Please run 'python gemma-3/prepare_data.py --dataset {config.dataset.dataset_name}' first.")
+        return
     
     dataloader = DataLoader(dataset, batch_size=config.training.batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False)
@@ -76,8 +141,17 @@ def train():
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda')
     
+    # Resolve output directory
+    if config.training.output_dir:
+        if not os.path.isabs(config.training.output_dir):
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            config.training.output_dir = os.path.join(project_root, config.training.output_dir)
+    else:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config.training.output_dir = os.path.join(project_root, "experiments", "gemma-3", config.dataset.dataset_name, "baseline")
+
     # TensorBoard
     writer = SummaryWriter(log_dir=config.training.output_dir)
 
@@ -94,7 +168,7 @@ def train():
                 input_ids = batch["input_ids"].to(device)
                 labels = batch["labels"].to(device)
                 
-                with torch.cuda.amp.autocast():
+                with torch.amp.autocast('cuda'):
                     outputs = model(input_ids, labels=labels)
                     loss = outputs["loss"]
                 
@@ -120,7 +194,7 @@ def train():
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
 
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 outputs = model(input_ids, labels=labels)
                 loss = outputs["loss"]
 
