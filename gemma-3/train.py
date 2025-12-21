@@ -6,7 +6,7 @@ import sys
 import numpy as np
 
 # Fix for CUDA memory fragmentation
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 
 # Add parent dir to path to import config/model
 # Add parent dir to path to import data_pipeline
@@ -133,14 +133,21 @@ def train():
         print(f"Please run 'python gemma-3/prepare_data.py --dataset {config.dataset.dataset_name}' first.")
         return
     
-    dataloader = DataLoader(dataset, batch_size=config.training.batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False)
+    # Optimize standard matmul precision
+    torch.set_float32_matmul_precision('high')
+
+    dataloader = DataLoader(dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Initialize Model
     model = Gemma3ForCausalLM(config.model).to(device)
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+    
+    # Compile model
+    print("Compiling model...")
+    model = torch.compile(model)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate, fused=True)
     scaler = torch.amp.GradScaler('cuda')
     
     # Resolve output directory
