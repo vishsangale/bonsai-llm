@@ -66,7 +66,7 @@ def process_tinyshakespeare(dataset_name, tokenizer_path):
     
     print(f"Saved to {output_dir}")
 
-def process_fineweb(dataset_name, tokenizer_path, sample_limit):
+def process_fineweb(dataset_name, tokenizer_path, token_limit):
     print(f"Processing FineWeb ({dataset_name})...")
     # For FineWeb, we stream directly from HF instead of downloading a raw file first
     from datasets import load_dataset
@@ -74,17 +74,6 @@ def process_fineweb(dataset_name, tokenizer_path, sample_limit):
 
     output_dir = os.path.join(MODEL_DATASETS_DIR, dataset_name)
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Check if files already exist - removing check to allow overwriting/extending if needed, 
-    # or better: we should probably clear or overwrite if user asks. 
-    # For now, let's just assume if we run this we want to regenerate/extend?
-    # Actually, if I want to just add more data, appending is risky if I don't know where I left off.
-    # Simple approach: Overwrite if running "prepare".
-    # But wait, existing logic checked existence.
-    # if os.path.exists(os.path.join(output_dir, 'train.bin')) and os.path.exists(os.path.join(output_dir, 'val.bin')):
-    #    print(f"FineWeb binaries already exist in {output_dir}. Skipping.")
-    #    return
-    # I will remove this check so we can regenerate with new limit.
     
     print(f"Loading tokenizer: {tokenizer_path}")
     try:
@@ -108,6 +97,7 @@ def process_fineweb(dataset_name, tokenizer_path, sample_limit):
     open(train_file, 'wb').close()
     open(val_file, 'wb').close()
     
+    total_tokens_count = 0
     train_tokens_count = 0
     val_tokens_count = 0
     
@@ -115,58 +105,57 @@ def process_fineweb(dataset_name, tokenizer_path, sample_limit):
     val_buffer = []
     buffer_size = 100 * 1024 # 100k tokens flush
     
-    # Validation ratio: 1/100
-    val_ratio = 100
+    # Validation ratio: 10%
+    # i % 10 == 0 -> val
     
-    limit_samples = sample_limit
-    print(f"Processing up to {limit_samples} samples...")
+    print(f"Processing up to {token_limit} tokens...")
 
     for i, entry in tqdm(enumerate(ds)):
-        if i >= limit_samples:
+        if total_tokens_count >= token_limit:
             break
             
         text = entry['text']
         tokens = tokenizer.encode(text, add_special_tokens=False)
         
-        # Split logic: simple every 100th doc to val
-        if i % val_ratio == 0:
+        # Split logic: 10% to val
+        if i % 10 == 0:
             val_buffer.extend(tokens)
+            val_tokens_count += len(tokens)
         else:
             train_buffer.extend(tokens)
+            train_tokens_count += len(tokens)
+            
+        total_tokens_count += len(tokens)
             
         # Flush if buffer full
         if len(train_buffer) >= buffer_size:
             arr = np.array(train_buffer, dtype=np.uint32)
             with open(train_file, 'ab') as f:
                 f.write(arr.tobytes())
-            train_tokens_count += len(arr)
             train_buffer = []
             
         if len(val_buffer) >= buffer_size:
             arr = np.array(val_buffer, dtype=np.uint32)
             with open(val_file, 'ab') as f:
                 f.write(arr.tobytes())
-            val_tokens_count += len(arr)
             val_buffer = []
             
     # Flush remainder
     if train_buffer:
         with open(train_file, 'ab') as f:
             f.write(np.array(train_buffer, dtype=np.uint32).tobytes())
-        train_tokens_count += len(train_buffer)
         
     if val_buffer:
         with open(val_file, 'ab') as f:
             f.write(np.array(val_buffer, dtype=np.uint32).tobytes())
-        val_tokens_count += len(val_buffer)
         
     print(f"Saved {train_tokens_count} train tokens, {val_tokens_count} val tokens to {output_dir}")
 
-def prepare_dataset(dataset_name, tokenizer_path, sample_limit):
+def prepare_dataset(dataset_name, tokenizer_path, token_limit):
     if dataset_name == 'tinyshakespeare':
         process_tinyshakespeare(dataset_name, tokenizer_path)
     elif dataset_name == 'fineweb':
-        process_fineweb(dataset_name, tokenizer_path, sample_limit)
+        process_fineweb(dataset_name, tokenizer_path, token_limit)
     else:
         print(f"Dataset {dataset_name} not implemented for Gemma-3 yet.")
 
@@ -174,10 +163,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Prepare data for Gemma-3')
     parser.add_argument('--dataset', type=str, required=True, choices=['tinyshakespeare', 'fineweb'], help='Dataset to process')
     parser.add_argument('--tokenizer_path', type=str, default="google/gemma-3-1b-pt", help='Path to tokenizer')
-    parser.add_argument('--sample_limit', type=int, default=500, help='Number of samples to process from FineWeb')
+    parser.add_argument('--token_limit', type=int, default=100000000, help='Number of tokens to process from FineWeb (default 100M)')
     
     args = parser.parse_args()
-    prepare_dataset(args.dataset, args.tokenizer_path, args.sample_limit)
+    prepare_dataset(args.dataset, args.tokenizer_path, args.token_limit)
 
     # Flush buffers and force exit to avoid PyGILState_Release errors with some libraries
     sys.stdout.flush()

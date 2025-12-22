@@ -32,11 +32,11 @@ class TrainingConfig:
     batch_size: int = 2
     gradient_accumulation_steps: int = 16 # Increase accum steps to keep effective batch size similar
     learning_rate: float = 3e-4
-    max_steps: int = 1000
-    warmup_steps: int = 102 # Short warmup for short run
+    max_steps: int = 100000
+    warmup_steps: int = 1000
     logging_steps: int = 10
-    eval_steps: int = 50
-    save_steps: int = 10
+    eval_steps: int = 1000
+    save_steps: int = 5000
     output_dir: Optional[str] = None
     device: str = "cuda"
 
