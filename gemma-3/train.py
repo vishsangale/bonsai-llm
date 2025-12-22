@@ -236,8 +236,10 @@ def train():
             
             if step % config.training.eval_steps == 0:
                  val_loss = evaluate()
-                 print(f"Step {step}: Validation Loss = {val_loss:.4f}")
+                 val_ppl = np.exp(val_loss)
+                 print(f"Step {step}: Validation Loss = {val_loss:.4f}, Perplexity = {val_ppl:.4f}")
                  writer.add_scalar("Validation/Loss", val_loss, step)
+                 writer.add_scalar("Validation/Perplexity", val_ppl, step)
 
             if step > 0 and step % config.training.save_steps == 0:
                  print(f"Saving checkpoint at step {step}...")
