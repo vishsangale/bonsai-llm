@@ -81,3 +81,23 @@ Dependencies:
     ```bash
     tensorboard --logdir experiments
     ```
+
+## Training Results
+
+### FineWeb Training Run (100k steps)
+
+We trained the Gemma-3 small model on the FineWeb dataset for 100,000 steps.
+
+**Configuration:**
+- **Model:** Gemma-3 (Approx 1B parameters scale down)
+- **Dataset:** FineWeb Edu
+- **Batch Size:** 2 (local), Gradient Accumulation: 16
+- **Max Steps:** 100,000
+- **Optimizer:** AdamW
+
+**Final Metrics (Step 99,000):**
+- **Validation Loss:** 3.8147
+- **Perplexity:** 45.3633
+
+These results indicate the model has successfully learned from the FineWeb dataset, achieving a perplexity of ~45.36.
+
