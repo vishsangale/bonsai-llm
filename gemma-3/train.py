@@ -248,7 +248,7 @@ def train():
             step += 1
             if step >= config.training.max_steps:
                 print("Max steps reached. Saving model...")
-                torch.save(model.state_dict(), os.path.join(config.training.output_dir, "gemma3_mini.pt"))
+                torch.save(model.state_dict(), os.path.join(config.training.output_dir, f"gemma3_step_{step}.pt"))
                 writer.close()
                 return
 
