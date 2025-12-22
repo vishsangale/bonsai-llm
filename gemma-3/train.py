@@ -4,6 +4,8 @@ from transformers import AutoTokenizer
 import os
 import sys
 import numpy as np
+import glob
+import re
 
 # Fix for CUDA memory fragmentation
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
@@ -52,6 +54,52 @@ class PretokenizedDataset(Dataset):
         return {"input_ids": input_ids, "labels": labels}
 
 from torch.utils.tensorboard import SummaryWriter
+
+def get_latest_checkpoint(output_dir):
+    if not os.path.exists(output_dir):
+        return None, 0
+    
+    # Checkpoints format: gemma3_step_{step}.pt
+    checkpoints = glob.glob(os.path.join(output_dir, "gemma3_step_*.pt"))
+    if not checkpoints:
+        return None, 0
+        
+    latest_step = 0
+    latest_ckpt = None
+    
+    for ckpt in checkpoints:
+        match = re.search(r"gemma3_step_(\d+).pt", ckpt)
+        if match:
+            step = int(match.group(1))
+            if step > latest_step:
+                latest_step = step
+                latest_ckpt = ckpt
+                
+    return latest_ckpt, latest_step
+
+def rotate_checkpoints(output_dir, max_checkpoints):
+    if max_checkpoints <= 0:
+        return
+        
+    checkpoints = glob.glob(os.path.join(output_dir, "gemma3_step_*.pt"))
+    
+    # Sort by step
+    ckpt_list = []
+    for ckpt in checkpoints:
+        match = re.search(r"gemma3_step_(\d+).pt", ckpt)
+        if match:
+             ckpt_list.append((int(match.group(1)), ckpt))
+             
+    ckpt_list.sort(key=lambda x: x[0])
+    
+    # Delete oldest if we have too many
+    while len(ckpt_list) > max_checkpoints:
+        step_to_remove, ckpt_to_remove = ckpt_list.pop(0)
+        try:
+            print(f"Rotating checkpoint: Removing {ckpt_to_remove}")
+            os.remove(ckpt_to_remove)
+        except OSError as e:
+            print(f"Error removing checkpoint {ckpt_to_remove}: {e}")
 
 def parse_args(config):
     # Very simple generic arg parser for --key=value
@@ -143,13 +191,6 @@ def train():
     model = Gemma3ForCausalLM(config.model).to(device)
     print(f"Model Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
     
-    # Compile model
-    print("Compiling model...")
-    model = torch.compile(model)
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate, fused=True)
-    scaler = torch.amp.GradScaler('cuda')
-    
     # Resolve output directory
     if config.training.output_dir:
         if not os.path.isabs(config.training.output_dir):
@@ -158,6 +199,35 @@ def train():
     else:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config.training.output_dir = os.path.join(project_root, "experiments", "gemma-3", config.dataset.dataset_name, "baseline")
+
+    # Resume logic
+    start_step = 0
+    latest_ckpt, latest_step = get_latest_checkpoint(config.training.output_dir)
+    if latest_ckpt:
+        print(f"Found checkpoint: {latest_ckpt}")
+        print(f"Resuming from step {latest_step}")
+        
+        state_dict = torch.load(latest_ckpt, map_location=device)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("_orig_mod."):
+                new_state_dict[k[10:]] = v
+            else:
+                new_state_dict[k] = v
+                
+        model.load_state_dict(new_state_dict)
+        start_step = latest_step
+    else:
+        print("No checkpoint found. Starting from scratch.")
+
+    # Compile model
+    print("Compiling model...")
+    model = torch.compile(model)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate, fused=True)
+    scaler = torch.amp.GradScaler('cuda')
+
+
 
     # TensorBoard
     writer = SummaryWriter(log_dir=config.training.output_dir)
@@ -186,9 +256,9 @@ def train():
         return total_loss / num_batches if num_batches > 0 else 0.0
 
     model.train()
-    step = 0
+    step = start_step
     
-    print("Starting training...")
+    print(f"Starting training from step {step}...")
     # Ensure output directory exists for checkpoints
     os.makedirs(config.training.output_dir, exist_ok=True)
 
@@ -284,6 +354,7 @@ def train():
             if step > 0 and step % config.training.save_steps == 0:
                  print(f"Saving checkpoint at step {step}...")
                  torch.save(model.state_dict(), os.path.join(config.training.output_dir, f"gemma3_step_{step}.pt"))
+                 rotate_checkpoints(config.training.output_dir, config.training.max_checkpoints)
 
             step += 1
             if step >= config.training.max_steps:

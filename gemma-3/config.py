@@ -43,6 +43,9 @@ class TrainingConfig:
     # Eval Harness
     eval_harness_steps: int = 10000
     eval_harness_tasks: List[str] = field(default_factory=lambda: ["hellaswag", "piqa"])
+    
+    # Checkpoints
+    max_checkpoints: int = 5
 
 @dataclass
 class DatasetConfig:
