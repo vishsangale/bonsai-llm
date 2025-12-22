@@ -39,6 +39,10 @@ class TrainingConfig:
     save_steps: int = 5000
     output_dir: Optional[str] = None
     device: str = "cuda"
+    
+    # Eval Harness
+    eval_harness_steps: int = 10000
+    eval_harness_tasks: List[str] = field(default_factory=lambda: ["hellaswag", "piqa"])
 
 @dataclass
 class DatasetConfig:

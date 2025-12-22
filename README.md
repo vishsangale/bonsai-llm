@@ -34,8 +34,18 @@ Dependencies:
 
 2. Install dependencies:
    ```bash
-   pip install torch transformers numpy requests tqdm tensorboard datasets
+   pip install torch transformers numpy requests tqdm tensorboard datasets lm_eval
    ```
+
+### Evaluation
+
+To run industry standard benchmarks (HellaSwag, PIQA, ARC, etc.), you can use the evaluation script:
+
+```bash
+python gemma-3/eval_harness.py --checkpoint experiments/gemma-3/fineweb/baseline/gemma3_step_99000.pt --tasks hellaswag,piqa,arc_easy
+```
+
+These benchmarks are also run periodically during training (configurable via `--training.eval_harness_steps`).
 
 ### Running the Project
  
@@ -100,4 +110,16 @@ We trained the Gemma-3 small model on the FineWeb dataset for 100,000 steps.
 - **Perplexity:** 45.3633
 
 These results indicate the model has successfully learned from the FineWeb dataset, achieving a perplexity of ~45.36.
+
+### Benchmark Results (Zero-shot)
+
+We evaluated the model on industry-standard benchmarks using `lm-evaluation-harness`.
+
+| Task | Metric | Value | Random Baseline |
+| :--- | :--- | :--- | :--- |
+| **ARC-Easy** | Accuracy | **41.20%** | ~25% |
+| **PIQA** | Accuracy | **57.78%** | ~50% |
+| **HellaSwag** | Accuracy | **26.51%** | ~25% |
+
+*Note: Results are zero-shot. HellaSwag remains challenging for smaller models at this training stage.*
 

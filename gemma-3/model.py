@@ -3,6 +3,7 @@ from typing import Optional, Tuple, List
 import torch
 from torch import nn
 import torch.nn.functional as F
+from transformers.modeling_outputs import CausalLMOutputWithPast
 try:
     from .config import ModelConfig
 except ImportError:
@@ -272,6 +273,13 @@ class Gemma3ForCausalLM(nn.Module):
                 module.weight.data[module.padding_idx].zero_()
 
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+        
+    def tie_weights(self):
+        self.lm_head.weight = self.model.embed_tokens.weight
+
     def forward(self, input_ids, labels=None, attention_mask=None):
         hidden_states = self.model(input_ids, attention_mask=attention_mask)
         logits = self.lm_head(hidden_states)
@@ -284,4 +292,10 @@ class Gemma3ForCausalLM(nn.Module):
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
             
-        return {"loss": loss, "logits": logits}
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+        )

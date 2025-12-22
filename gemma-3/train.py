@@ -177,7 +177,7 @@ def train():
                 
                 with torch.amp.autocast('cuda'):
                     outputs = model(input_ids, labels=labels)
-                    loss = outputs["loss"]
+                    loss = outputs.loss
                 
                 total_loss += loss.item()
                 num_batches += 1
@@ -203,7 +203,7 @@ def train():
 
             with torch.amp.autocast('cuda'):
                 outputs = model(input_ids, labels=labels)
-                loss = outputs["loss"]
+                loss = outputs.loss
 
             scaler.scale(loss).backward()
             
@@ -240,6 +240,46 @@ def train():
                  print(f"Step {step}: Validation Loss = {val_loss:.4f}, Perplexity = {val_ppl:.4f}")
                  writer.add_scalar("Validation/Loss", val_loss, step)
                  writer.add_scalar("Validation/Perplexity", val_ppl, step)
+
+            if step > 0 and step % config.training.eval_harness_steps == 0:
+                 print(f"Running Eval Harness at step {step}...")
+                 try:
+                     import lm_eval
+                     from lm_eval.models.huggingface import HFLM
+                     
+                     # Re-wrap model. HFLM is lightweight wrapper.
+                     # We use the raw model (not compiled) if possible, but compiled might work.
+                     # HFLM expects a model that returns CausalLMOutput-like object or dict with logits.
+                     # We updated model to return CausalLMOutputWithPast, so it should work.
+                     
+                     # Note: HFLM might assume it owns the model. We pass it in.
+                     # Using batch_size from training config might be too aggressive for heavier eval tasks, 
+                     # but let's try.
+                     
+                     # IMPORTANT: HFLM expects 'device' attribute or we pass it. 
+                     # We added 'device' property to model.
+                     
+                     hflm = HFLM(pretrained=model, tokenizer=tokenizer, batch_size=config.training.batch_size)
+                     
+                     results = lm_eval.simple_evaluate(
+                        model=hflm,
+                        tasks=config.training.eval_harness_tasks,
+                        limit=None # Evaluate all or set a limit in config if needed
+                     )
+                     
+                     # Log results
+                     for task, metrics in results['results'].items():
+                         for metric_name, value in metrics.items():
+                             if isinstance(value, (int, float)):
+                                 # Metric name often has none, e.g. "acc,none"
+                                 clean_metric = metric_name.split(',')[0]
+                                 writer.add_scalar(f"Eval/{task}/{clean_metric}", value, step)
+                                 print(f"Eval {task} {clean_metric}: {value:.4f}")
+                                 
+                 except Exception as e:
+                     print(f"Eval Harness Failed: {e}")
+                     import traceback
+                     traceback.print_exc()
 
             if step > 0 and step % config.training.save_steps == 0:
                  print(f"Saving checkpoint at step {step}...")
