@@ -126,6 +126,9 @@ def parse_args(config):
                 # Cast value
                 if target_type == bool:
                     new_val = value_str.lower() in ('true', '1', 'yes', 'on')
+                elif current_val is None:
+                    # If default is None, assume string
+                    new_val = value_str
                 else:
                     new_val = target_type(value_str)
                     
@@ -265,6 +268,7 @@ def train():
     import time
     start_time = time.time()
     last_log_time = time.time()
+    avg_loss = None
 
     for epoch in range(10): # Arbitrary epochs, loop controlled by max_steps
         for batch in dataloader:
@@ -285,6 +289,12 @@ def train():
             # Batch size * sequence length
             tokens_per_step = input_ids.numel()
 
+            # EMA Smoothing
+            if avg_loss is None:
+                avg_loss = loss.item()
+            else:
+                avg_loss = 0.95 * avg_loss + 0.05 * loss.item()
+
             if step % config.training.logging_steps == 0:
                 current_time = time.time()
                 elapsed_time = current_time - last_log_time
@@ -297,8 +307,9 @@ def train():
                 avg_step_time = elapsed_time / steps_logged
                 tokens_per_sec = (tokens_per_step * steps_logged) / elapsed_time
 
-                print(f"Step {step}: Loss = {loss.item():.4f}, Avg Time = {avg_step_time:.3f}s, Tokens/sec = {tokens_per_sec:.2f}")
+                print(f"Step {step}: Loss = {loss.item():.4f}, Smoothed Loss = {avg_loss:.4f}, Avg Time = {avg_step_time:.3f}s, Tokens/sec = {tokens_per_sec:.2f}")
                 writer.add_scalar("Training/Loss", loss.item(), step)
+                writer.add_scalar("Training/SmoothedLoss", avg_loss, step)
                 writer.add_scalar("Performance/TimePerStep", avg_step_time, step)
                 writer.add_scalar("Performance/TokensPerSec", tokens_per_sec, step)
                 

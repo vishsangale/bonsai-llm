@@ -6,9 +6,9 @@ class ModelConfig:
     vocab_size: int = 256000
     hidden_size: int = 768        # Original 1B: 2048
     intermediate_size: int = 3072 # 4x hidden_size. Original 1B: 16384 (8x)
-    num_hidden_layers: int = 24   # Original 1B: 18
+    num_hidden_layers: int = 26   # Original 1B: 26
     num_attention_heads: int = 12 # Original 1B: 8
-    num_key_value_heads: int = 1  # Original 1B: 1
+    num_key_value_heads: int = 3  # Original 1B: 4 (GQA). Ration 4:1 preserved.
     head_dim: int = 64            # Original 1B: 256
     max_position_embeddings: int = 2048
     rms_norm_eps: float = 1e-6
@@ -30,11 +30,11 @@ class ModelConfig:
 @dataclass
 class TrainingConfig:
     batch_size: int = 2
-    gradient_accumulation_steps: int = 16 # Increase accum steps to keep effective batch size similar
+    gradient_accumulation_steps: int = 128 # Increase accum steps to keep effective batch size to ~250k tokens
     learning_rate: float = 3e-4
     max_steps: int = 100000
     warmup_steps: int = 1000
-    logging_steps: int = 10
+    logging_steps: int = 100
     eval_steps: int = 1000
     save_steps: int = 5000
     output_dir: Optional[str] = None

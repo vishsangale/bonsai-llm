@@ -55,6 +55,19 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep).
+    The hidden states go from (batch, num_key_value_heads, seqlen, head_dim) to
+    (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 class Gemma3MLP(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
@@ -114,6 +127,10 @@ class Gemma3Attention(nn.Module):
         # Apply RoPE
         cos, sin = self.rotary_emb(value_states, seq_len=q_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        # Repeat KV for GQA
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         # Attention Masking
         attn_mask = attention_mask
