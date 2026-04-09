@@ -193,7 +193,7 @@ My rule of thumb: if you can't say what decision changes based on the eval resul
 
 ## What's next
 
-**Part 2** moves into open-ended generation evals. We'll use a small instruction-tuned model, build a RAG pipeline, and measure it with RAGAS — scoring faithfulness, answer relevance, and context recall.
+**Part 2** moves into open-ended generation evals. We'll use Gemma-3 (1B, instruction-tuned), build a RAG pipeline, and measure it with RAGAS — scoring faithfulness, response relevancy, context precision, context recall, answer correctness, and semantic similarity across three different knowledge bases.
 
 **Part 3** compares the major eval frameworks side-by-side: lm-eval-harness, DeepEval, RAGAS, and Inspect.
 
