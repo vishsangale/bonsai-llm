@@ -1,0 +1,23 @@
+{
+  "arc_easy": {
+    "alias": "arc_easy",
+    "acc,none": 0.49074074074074076,
+    "acc_stderr,none": 0.010258024147860667,
+    "acc_norm,none": 0.43602693602693604,
+    "acc_norm_stderr,none": 0.0101754595827598
+  },
+  "hellaswag": {
+    "alias": "hellaswag",
+    "acc,none": 0.3331009759012149,
+    "acc_stderr,none": 0.004703590558552376,
+    "acc_norm,none": 0.39384584744074885,
+    "acc_norm_stderr,none": 0.0048760280379416265
+  },
+  "piqa": {
+    "alias": "piqa",
+    "acc,none": 0.676278563656148,
+    "acc_stderr,none": 0.01091676501070871,
+    "acc_norm,none": 0.6637649619151251,
+    "acc_norm_stderr,none": 0.01102234670897027
+  }
+}

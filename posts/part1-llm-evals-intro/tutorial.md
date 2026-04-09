@@ -119,12 +119,12 @@ One thing that trips up beginners: if a task name is wrong or not installed, the
 ```
 |   Tasks   |Version|Filter|n-shot|  Metric  | Value |   |Stderr|
 |-----------|------:|------|-----:|----------|------:|---|-----:|
-|arc_easy   |      1|none  |     0|acc       | 0.4360|±  |0.0102|
-|           |       |      |      |acc_norm  | 0.4394|±  |0.0102|
-|hellaswag  |      1|none  |     0|acc       | 0.2886|±  |0.0045|
-|           |       |      |      |acc_norm  | 0.2951|±  |0.0045|
-|piqa       |      1|none  |     0|acc       | 0.6305|±  |0.0112|
-|           |       |      |      |acc_norm  | 0.6250|±  |0.0112|
+|arc_easy   |      1|none  |     0|acc       | 0.4381|±  |0.0102|
+|           |       |      |      |acc_norm  | 0.3948|±  |0.0100|
+|hellaswag  |      1|none  |     0|acc       | 0.2892|±  |0.0045|
+|           |       |      |      |acc_norm  | 0.3114|±  |0.0046|
+|piqa       |      1|none  |     0|acc       | 0.6289|±  |0.0113|
+|           |       |      |      |acc_norm  | 0.6251|±  |0.0113|
 ```
 
 The `Stderr` column tells you how reliable the estimate is. For ARC-Easy (~2600 questions) it's ±0.01, meaning the true number is probably within one percentage point of what's shown. For tasks with fewer examples, stderr grows — keep that in mind when comparing small differences between models.
@@ -135,13 +135,13 @@ The `Stderr` column tells you how reliable the estimate is. For ARC-Easy (~2600 
 
 | Task | acc_norm (GPT-2) | Random |
 |---|---|---|
-| ARC-Easy | ~44% | 25% |
-| PIQA | ~62% | 50% |
-| HellaSwag | ~30% | 25% |
+| ARC-Easy | 39.5% | 25% |
+| PIQA | 62.5% | 50% |
+| HellaSwag | 31.1% | 25% |
 
-The PIQA score is the interesting one. GPT-2 at ~62% on a 50% baseline is a larger gain than ARC-Easy's ~44% on a 25% baseline, in relative terms. That's not because PIQA is easier — it's because GPT-2's training data (web text) is saturated with "how to" content about physical tasks. GPT-2 picked up enough statistical regularity about physical tasks from web text that it transfers to this benchmark.
+The PIQA score is the interesting one. GPT-2 at 62.5% on a 50% baseline is a larger gain than ARC-Easy's 39.5% on a 25% baseline, in relative terms. That's not because PIQA is easier — it's because GPT-2's training data (web text) is saturated with "how to" content about physical tasks. GPT-2 picked up enough statistical regularity about physical tasks from web text that it transfers to this benchmark.
 
-HellaSwag at ~30% is close to chance. That's expected here: GPT-2 was trained to predict tokens, not to reason about what comes next in a scenario. HellaSwag was designed so that wrong answers score high on surface-level statistics — exactly the thing GPT-2 is good at — which is why small base completion models consistently score poorly on it.
+HellaSwag at 31.1% is close to chance. That's expected here: GPT-2 was trained to predict tokens, not to reason about what comes next in a scenario. HellaSwag was designed so that wrong answers score high on surface-level statistics — exactly the thing GPT-2 is good at — which is why small base completion models consistently score poorly on it.
 
 ---
 
@@ -156,7 +156,15 @@ MODEL = "gpt2-large"   # 774M parameters
 MODEL = "gpt2-xl"      # 1.5B parameters
 ```
 
-All three scores improve with size. Anecdotally, HellaSwag tends to move more than ARC-Easy as you go up the GPT-2 family — the adversarial task seems to benefit more from additional capacity — but run it yourself and see what you observe. The gap between acc and acc_norm may also narrow at larger sizes; that's worth watching.
+All three scores improve with size. Here are the actual numbers across all four variants (acc_norm, zero-shot):
+
+| Task | gpt2 (124M) | gpt2-medium (355M) | gpt2-large (774M) | gpt2-xl (1.5B) | Random |
+|---|---|---|---|---|---|
+| ARC-Easy | 39.5% | 43.6% | 46.6% | 51.1% | 25% |
+| PIQA | 62.5% | 66.4% | 69.2% | 70.5% | 50% |
+| HellaSwag | 31.1% | 39.4% | 45.3% | 50.9% | 25% |
+
+HellaSwag scales the most — +19.8pp from base to xl — consistent with the adversarial task benefiting more from additional capacity. PIQA shows diminishing returns: GPT-2's web text training already gives it a strong foundation for physical intuition tasks, so additional parameters help less. ARC-Easy sits in the middle.
 
 The script saves `results_<model>.json` after each run. Diff two JSON files to track which tasks regress after fine-tuning — that's the main practical use of these baselines.
 
