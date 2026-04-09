@@ -316,3 +316,50 @@ class Gemma3ForCausalLM(nn.Module):
             hidden_states=None,
             attentions=None,
         )
+
+    @torch.no_grad()
+    def generate(self, input_ids, max_new_tokens=100, temperature=1.0, top_k=50, do_sample=False, **kwargs):
+        # Basic autoregressive generation
+        self.eval()
+        curr_input_ids = input_ids.clone()
+        
+        # Determine EOS token if possible (defaulting to something if not in config)
+        # config doesn't have eos_token_id explicitly, usually it's tokenizer specific.
+        # We will just generate for max_new_tokens for now unless kwargs has stopping.
+        
+        for _ in range(max_new_tokens):
+            # Crop to context length if needed to avoid crash
+            cond_input_ids = curr_input_ids
+            if cond_input_ids.shape[1] > self.config.max_position_embeddings:
+                cond_input_ids = cond_input_ids[:, -self.config.max_position_embeddings:]
+                
+            outputs = self(cond_input_ids)
+            next_token_logits = outputs.logits[:, -1, :]
+            
+            if do_sample:
+                 if temperature > 0:
+                     next_token_logits = next_token_logits / temperature
+                 # Top-k
+                 if top_k > 0:
+                     v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
+                     next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
+                     
+                 probs = F.softmax(next_token_logits, dim=-1)
+                 next_token = torch.multinomial(probs, num_samples=1)
+            else:
+                 next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+                 
+            curr_input_ids = torch.cat([curr_input_ids, next_token], dim=1)
+            
+            # Check for EOS if provided in kwargs. e.g. 'eos_token_id'
+            if 'eos_token_id' in kwargs and kwargs['eos_token_id'] is not None:
+                eos_id = kwargs['eos_token_id']
+                if isinstance(eos_id, int):
+                    eos_id = [eos_id]
+                if any(t in eos_id for t in next_token.flatten().tolist()):
+                     # Naive stopping: if all batch elements hit eos? 
+                     # For simplicity, we continue until max_len or let caller truncate.
+                     # Proper batched stopping is complex.
+                     pass
+
+        return curr_input_ids

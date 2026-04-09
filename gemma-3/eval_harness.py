@@ -22,6 +22,7 @@ try:
     import lm_eval
     from lm_eval.models.huggingface import HFLM
     from lm_eval import evaluator
+    from lm_eval.tasks import TaskManager
 except ImportError:
     print("Error: lm_eval not installed. Please run 'pip install lm_eval'")
     sys.exit(1)
@@ -62,10 +63,15 @@ def run_eval(checkpoint_path, tasks, limit=None, batch_size=None):
     hflm = HFLM(pretrained=model, tokenizer=tokenizer, batch_size=batch_size)
     
     print(f"Running evaluation on tasks: {tasks}")
+    # Set max_gen_toks to avoid context limits error on generative tasks
+    # Model max length is 2048. If task requests 2048 gen, context becomes 0.
+    gen_kwargs = {"max_gen_toks": 1024}
+    
     results = lm_eval.simple_evaluate(
         model=hflm,
         tasks=tasks,
         limit=limit,
+        gen_kwargs=gen_kwargs
     )
     
     import json
@@ -81,11 +87,28 @@ def run_eval(checkpoint_path, tasks, limit=None, batch_size=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
-    parser.add_argument("--tasks", type=str, default="hellaswag,piqa,arc_easy", help="Comma separated list of tasks")
+    parser.add_argument("--tasks", type=str, default="hellaswag,mmlu_pro", help="Comma separated list of tasks")
     parser.add_argument("--limit", type=int, default=None, help="Limit number of samples per task for testing")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for evaluation")
     
     args = parser.parse_args()
-    tasks_list = args.tasks.split(",")
+    
+    if args.tasks == "all":
+        task_manager = TaskManager()
+        all_task_names = task_manager.all_tasks
+        tasks_list = []
+        print(f"Found {len(all_task_names)} potential tasks. Filtering available ones...")
+        for task_name in all_task_names:
+            try:
+                # Try to load the task configuration/class to check for dependencies
+                # This is a heuristic; simple_evaluate will re-load them, but this catches init errors
+                task_manager.load_task_or_group(task_name)
+                tasks_list.append(task_name)
+            except Exception as e:
+                # print(f"Skipping task '{task_name}': {e}") # Optional: verify verbose output
+                pass
+        print(f"Selected {len(tasks_list)} tasks out of {len(all_task_names)}.")
+    else:
+        tasks_list = args.tasks.split(",")
     
     run_eval(args.checkpoint, tasks_list, args.limit, args.batch_size)

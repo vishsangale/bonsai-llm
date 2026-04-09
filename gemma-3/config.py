@@ -32,7 +32,7 @@ class TrainingConfig:
     batch_size: int = 2
     gradient_accumulation_steps: int = 128 # Increase accum steps to keep effective batch size to ~250k tokens
     learning_rate: float = 3e-4
-    max_steps: int = 100000
+    max_steps: int = 1000000
     warmup_steps: int = 1000
     logging_steps: int = 100
     eval_steps: int = 1000
