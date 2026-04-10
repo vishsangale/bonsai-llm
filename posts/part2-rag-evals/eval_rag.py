@@ -13,7 +13,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from ragas.llms import LangchainLLMWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper
 import wikipedia as wiki_api
 from huggingface_hub import ModelCard
 import numpy as np
@@ -242,7 +244,7 @@ def _get_ragas_llm():
         raise EnvironmentError(
             "GEMINI_API_KEY not set. Add it to .envother in the repo root."
         )
-    gemini = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key)
+    gemini = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=api_key)
     return LangchainLLMWrapper(gemini)
 
 
@@ -253,13 +255,16 @@ def score_with_ragas(samples: list[dict]) -> dict:
     Returns dict of metric_name -> float score.
     """
     judge_llm = _get_ragas_llm()
+    local_embeddings = LangchainEmbeddingsWrapper(
+        HuggingFaceEmbeddings(model_name=EMBED_MODEL_NAME)
+    )
     metrics = [
         Faithfulness(llm=judge_llm),
-        ResponseRelevancy(llm=judge_llm),
+        ResponseRelevancy(llm=judge_llm, embeddings=local_embeddings),
         ContextPrecision(llm=judge_llm),
         ContextRecall(llm=judge_llm),
-        AnswerCorrectness(llm=judge_llm),
-        SemanticSimilarity(),  # embedding-only, no LLM needed
+        AnswerCorrectness(llm=judge_llm, embeddings=local_embeddings),
+        SemanticSimilarity(embeddings=local_embeddings),
     ]
 
     dataset = HFDataset.from_list(samples)
