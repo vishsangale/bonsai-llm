@@ -16,6 +16,8 @@ from huggingface_hub import ModelCard
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 load_dotenv()
 
@@ -162,3 +164,50 @@ def retrieve(question: str, index, chunks: list[str], k: int = TOP_K) -> list[st
     faiss.normalize_L2(q_vec)
     _, ids = index.search(q_vec, min(k, len(chunks)))
     return [chunks[i] for i in ids[0] if i < len(chunks)]
+
+
+# ── Generator ─────────────────────────────────────────────────────────────────
+
+GENERATOR_MODEL = "google/gemma-3-1b-it"
+_gen_model = None
+_gen_tokenizer = None
+
+PROMPT_TEMPLATE = (
+    "Answer the question using only the context below. "
+    "If the answer is not in the context, say 'I don't know'.\n\n"
+    "Context:\n{context}\n\n"
+    "Question: {question}\n"
+    "Answer:"
+)
+
+def get_generator():
+    global _gen_model, _gen_tokenizer
+    if _gen_model is None:
+        print(f"Loading generator model {GENERATOR_MODEL!r}...")
+        _gen_tokenizer = AutoTokenizer.from_pretrained(GENERATOR_MODEL)
+        _gen_model = AutoModelForCausalLM.from_pretrained(
+            GENERATOR_MODEL,
+            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None,
+        )
+        if not torch.cuda.is_available():
+            _gen_model = _gen_model.to("cpu")
+    return _gen_model, _gen_tokenizer
+
+def generate_answer(question: str, contexts: list[str]) -> str:
+    """Generate an answer conditioned on retrieved contexts using Gemma-3-1b-it."""
+    model, tokenizer = get_generator()
+    context_str = "\n\n".join(contexts)
+    prompt = PROMPT_TEMPLATE.format(context=context_str, question=question)
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=MAX_NEW_TOKENS,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+    # Decode only the newly generated tokens (after the prompt)
+    new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
+    return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
