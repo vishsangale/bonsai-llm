@@ -18,6 +18,16 @@ import faiss
 from sentence_transformers import SentenceTransformer
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from datasets import Dataset as HFDataset
+from ragas import evaluate
+from ragas.metrics import (
+    Faithfulness,
+    ResponseRelevancy,
+    ContextPrecision,
+    ContextRecall,
+    AnswerCorrectness,
+    SemanticSimilarity,
+)
 
 load_dotenv()
 
@@ -215,3 +225,75 @@ def generate_answer(question: str, contexts: list[str]) -> str:
     # Decode only the newly generated tokens (after the prompt)
     new_tokens = output_ids[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+
+
+# ── RAGAS Scoring ─────────────────────────────────────────────────────────────
+
+RAGAS_METRICS = [
+    Faithfulness(),
+    ResponseRelevancy(),
+    ContextPrecision(),
+    ContextRecall(),
+    AnswerCorrectness(),
+    SemanticSimilarity(),
+]
+
+
+def score_with_ragas(samples: list[dict]) -> dict:
+    """
+    Run RAGAS on a list of dicts with keys:
+        user_input, retrieved_contexts (list[str]), response, reference
+    Returns dict of metric_name -> float score.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError(
+            "OPENAI_API_KEY not set. Add it to your .env file. "
+            "See .env.example for the format."
+        )
+
+    dataset = HFDataset.from_list(samples)
+    result = evaluate(dataset=dataset, metrics=RAGAS_METRICS)
+    # result.scores is a list of per-sample dicts; average across samples
+    scores = {}
+    for metric_name in result.scores[0]:
+        vals = [s[metric_name] for s in result.scores if s[metric_name] is not None]
+        scores[metric_name] = sum(vals) / len(vals) if vals else float("nan")
+    return scores
+
+
+def run_dataset(dataset_name: str) -> dict:
+    """Load corpus, build index, generate answers, score with RAGAS."""
+    print(f"\n{'='*60}")
+    print(f"Running dataset: {dataset_name}")
+    print(f"{'='*60}")
+
+    print("Loading corpus...")
+    docs = CORPUS_LOADERS[dataset_name]()
+    print(f"  {len(docs)} documents loaded")
+
+    index, chunks = build_index(docs)
+
+    print("Loading eval samples...")
+    eval_samples = load_eval_samples(dataset_name)
+    print(f"  {len(eval_samples)} questions")
+
+    print("Generating answers...")
+    ragas_samples = []
+    for i, sample in enumerate(eval_samples):
+        q = sample["question"]
+        ref = sample["reference"]
+        contexts = retrieve(q, index, chunks)
+        response = generate_answer(q, contexts)
+        ragas_samples.append({
+            "user_input": q,
+            "retrieved_contexts": contexts,
+            "response": response,
+            "reference": ref,
+        })
+        if (i + 1) % 5 == 0:
+            print(f"  {i+1}/{len(eval_samples)} done")
+
+    print("Scoring with RAGAS...")
+    scores = score_with_ragas(ragas_samples)
+    return scores
