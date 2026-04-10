@@ -11,6 +11,8 @@ Usage:
 import os, json, argparse, textwrap
 from pathlib import Path
 from dotenv import load_dotenv
+import wikipedia as wiki_api
+from huggingface_hub import ModelCard
 
 load_dotenv()
 
@@ -50,3 +52,54 @@ def format_results_table(dataset_name: str, results: dict) -> str:
     sep_row = "|" + "-" * 24 + "|" + "-" * 8 + "|\n"
     rows = "".join(row_fmt.format(k, f"{v:.4f}") for k, v in results.items())
     return header + divider + header_row + sep_row + rows
+
+
+# ── Corpus Loaders ────────────────────────────────────────────────────────────
+
+def load_custom_corpus() -> list[str]:
+    """Load hand-written passages from data/custom_corpus.json."""
+    with open(DATA_DIR / "custom_corpus.json") as f:
+        items = json.load(f)
+    return [item["text"] for item in items]
+
+
+WIKIPEDIA_ARTICLES = [
+    "Photosynthesis", "DNA", "Black hole", "Plate tectonics",
+    "Vaccine", "Neuron", "Quantum mechanics", "Evolution"
+]
+
+def load_wikipedia_corpus() -> list[str]:
+    """Fetch pinned Wikipedia articles and return their summaries."""
+    docs = []
+    for title in WIKIPEDIA_ARTICLES:
+        try:
+            page = wiki_api.page(title, auto_suggest=False)
+            docs.append(page.content[:3000])  # first ~3000 chars to keep it manageable
+        except Exception as e:
+            print(f"  Warning: could not fetch '{title}': {e}")
+    return docs
+
+
+HF_MODELS = [
+    "bert-base-uncased", "gpt2", "t5-small", "distilbert-base-uncased",
+    "roberta-base", "facebook/bart-large-cnn", "openai/whisper-small",
+    "google/flan-t5-base"
+]
+
+def load_hf_model_cards_corpus() -> list[str]:
+    """Fetch model card text from pinned HuggingFace models."""
+    docs = []
+    for model_id in HF_MODELS:
+        try:
+            card = ModelCard.load(model_id)
+            docs.append(card.text[:3000])
+        except Exception as e:
+            print(f"  Warning: could not fetch card for '{model_id}': {e}")
+    return docs
+
+
+CORPUS_LOADERS = {
+    "wikipedia": load_wikipedia_corpus,
+    "custom": load_custom_corpus,
+    "hf-model-cards": load_hf_model_cards_corpus,
+}
