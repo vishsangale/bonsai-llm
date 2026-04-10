@@ -141,6 +141,9 @@ def build_index(docs: list[str]) -> tuple:
     for doc in docs:
         chunks.extend(chunk_text(doc))
 
+    if not chunks:
+        raise ValueError("No chunks produced from docs — corpus may be empty.")
+
     embed_model = get_embed_model()
     print(f"Embedding {len(chunks)} chunks...")
     embeddings = embed_model.encode(chunks, show_progress_bar=True, convert_to_numpy=True)
@@ -157,5 +160,5 @@ def retrieve(question: str, index, chunks: list[str], k: int = TOP_K) -> list[st
     embed_model = get_embed_model()
     q_vec = embed_model.encode([question], convert_to_numpy=True).astype(np.float32)
     faiss.normalize_L2(q_vec)
-    _, ids = index.search(q_vec, k)
+    _, ids = index.search(q_vec, min(k, len(chunks)))
     return [chunks[i] for i in ids[0] if i < len(chunks)]
