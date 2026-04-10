@@ -1,0 +1,8 @@
+{
+  "faithfulness": NaN,
+  "answer_relevancy": 0.22394645876934396,
+  "context_precision": 0.3249999999675,
+  "context_recall": 0.3,
+  "answer_correctness": 0.15413788837149084,
+  "semantic_similarity": 0.2165515534859633
+}
