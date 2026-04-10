@@ -13,6 +13,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 import wikipedia as wiki_api
 from huggingface_hub import ModelCard
+import numpy as np
+import faiss
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
@@ -103,3 +106,56 @@ CORPUS_LOADERS = {
     "custom": load_custom_corpus,
     "hf-model-cards": load_hf_model_cards_corpus,
 }
+
+
+# ── Eval Sample Loader ────────────────────────────────────────────────────────
+
+def load_eval_samples(dataset: str) -> list[dict]:
+    """Return list of {question, reference} dicts for the given dataset."""
+    with open(DATA_DIR / "eval_samples.json") as f:
+        all_samples = json.load(f)
+    if dataset not in all_samples:
+        raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(all_samples)}")
+    return all_samples[dataset]
+
+
+# ── Embedding & FAISS Index ───────────────────────────────────────────────────
+
+EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+_embed_model = None
+
+
+def get_embed_model() -> SentenceTransformer:
+    global _embed_model
+    if _embed_model is None:
+        print("Loading embedding model...")
+        _embed_model = SentenceTransformer(EMBED_MODEL_NAME)
+    return _embed_model
+
+
+def build_index(docs: list[str]) -> tuple:
+    """Chunk all docs, embed them, build a FAISS index.
+    Returns (index, chunks) where chunks[i] corresponds to index vector i.
+    """
+    chunks = []
+    for doc in docs:
+        chunks.extend(chunk_text(doc))
+
+    embed_model = get_embed_model()
+    print(f"Embedding {len(chunks)} chunks...")
+    embeddings = embed_model.encode(chunks, show_progress_bar=True, convert_to_numpy=True)
+    embeddings = embeddings.astype(np.float32)
+    faiss.normalize_L2(embeddings)
+
+    index = faiss.IndexFlatIP(embeddings.shape[1])
+    index.add(embeddings)
+    return index, chunks
+
+
+def retrieve(question: str, index, chunks: list[str], k: int = TOP_K) -> list[str]:
+    """Return top-k chunks most relevant to the question."""
+    embed_model = get_embed_model()
+    q_vec = embed_model.encode([question], convert_to_numpy=True).astype(np.float32)
+    faiss.normalize_L2(q_vec)
+    _, ids = index.search(q_vec, k)
+    return [chunks[i] for i in ids[0] if i < len(chunks)]
