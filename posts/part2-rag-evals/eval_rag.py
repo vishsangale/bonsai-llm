@@ -26,8 +26,8 @@ from ragas.metrics import (
     ContextPrecision,
     ContextRecall,
     AnswerCorrectness,
-    SemanticSimilarity,
 )
+from ragas.metrics.collections import SemanticSimilarity
 
 load_dotenv()
 
