@@ -198,7 +198,11 @@ def generate_answer(question: str, contexts: list[str]) -> str:
     """Generate an answer conditioned on retrieved contexts using Gemma-3-1b-it."""
     model, tokenizer = get_generator()
     context_str = "\n\n".join(contexts)
-    prompt = PROMPT_TEMPLATE.format(context=context_str, question=question)
+    user_content = PROMPT_TEMPLATE.format(context=context_str, question=question)
+
+    # Use the chat template so the instruction-tuned model follows the prompt correctly
+    messages = [{"role": "user", "content": user_content}]
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
