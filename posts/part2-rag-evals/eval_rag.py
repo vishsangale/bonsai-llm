@@ -297,3 +297,58 @@ def run_dataset(dataset_name: str) -> dict:
     print("Scoring with RAGAS...")
     scores = score_with_ragas(ragas_samples)
     return scores
+
+
+def print_comparison_table(all_results: dict):
+    """Print a cross-dataset comparison table."""
+    datasets = list(all_results.keys())
+    metrics = list(next(iter(all_results.values())).keys())
+
+    col_w = 14
+    header = "| {:<22} |".format("Metric") + "".join(f" {d:<{col_w}} |" for d in datasets)
+    sep = "|" + "-"*24 + "|" + ("".join("-"*(col_w+2) + "|" for _ in datasets))
+    print(f"\n{'='*60}")
+    print("Cross-dataset comparison (acc_norm-style)")
+    print(f"{'='*60}")
+    print(header)
+    print(sep)
+    for metric in metrics:
+        row = f"| {metric:<22} |"
+        for d in datasets:
+            val = all_results[d].get(metric, float("nan"))
+            row += f" {val:<{col_w}.4f} |"
+        print(row)
+
+def save_results(dataset_name: str, scores: dict):
+    """Save results dict to results_<dataset>.json."""
+    path = Path(__file__).parent / f"results_{dataset_name}.json"
+    with open(path, "w") as f:
+        json.dump(scores, f, indent=2)
+    print(f"\nRaw results saved to {path.name}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="RAG eval with RAGAS across knowledge bases")
+    parser.add_argument(
+        "--dataset",
+        choices=list(CORPUS_LOADERS) + ["all"],
+        default="custom",
+        help="Which knowledge base to evaluate (default: custom)"
+    )
+    args = parser.parse_args()
+
+    datasets = list(CORPUS_LOADERS) if args.dataset == "all" else [args.dataset]
+    all_results = {}
+
+    for ds in datasets:
+        scores = run_dataset(ds)
+        print(format_results_table(ds, scores))
+        save_results(ds, scores)
+        all_results[ds] = scores
+
+    if len(datasets) > 1:
+        print_comparison_table(all_results)
+
+
+if __name__ == "__main__":
+    main()
