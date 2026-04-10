@@ -143,7 +143,7 @@ On first run, the script downloads Gemma-3-1b-it (~2GB) and the embedding model 
 
 Custom corpus output:
 
-```
+
 Dataset: custom
 ──────────────────────────────────────────────────
 | Metric                 |  Score |
@@ -154,7 +154,7 @@ Dataset: custom
 | context_recall         | 1.0000 |
 | answer_correctness     | 0.4897 |
 | semantic_similarity    | 0.5256 |
-```
+
 
 The `nan` for faithfulness comes from the metric failing to produce a numeric score in this run. The RAGAS faithfulness metric asks the judge to return structured verdicts for each claim; when the response does not match the expected format, the score is undefined. This happened consistently with Gemini 2.5 Flash across all three datasets. Test your judge model against faithfulness on a small sample before relying on it. The other five metrics are unaffected.
 
