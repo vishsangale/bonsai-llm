@@ -40,7 +40,7 @@
     {"question": "What is the ultimate fate of the universe according to thermodynamics?", "reference": "A state of maximum entropy called heat death."},
     {"question": "What immune system did CRISPR originate from?", "reference": "The bacterial immune system."},
     {"question": "What does the guide RNA do in CRISPR-Cas9?", "reference": "The guide RNA directs the Cas9 protein to a specific location in the genome."},
-    {"question": "What disease was treated using CRISPR mentioned in the text?", "reference": "Sickle cell anemia."},
+    {"question": "What genetic disease is mentioned as an application of CRISPR-Cas9 therapy?", "reference": "Sickle cell anemia."},
     {"question": "What is wave-particle duality?", "reference": "Wave-particle duality is the quantum principle that particles exhibit both wave-like and particle-like properties."}
   ],
   "hf-model-cards": [
