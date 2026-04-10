@@ -12,6 +12,8 @@ import os, json, argparse, textwrap, warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
 from pathlib import Path
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from ragas.llms import LangchainLLMWrapper
 import wikipedia as wiki_api
 from huggingface_hub import ModelCard
 import numpy as np
@@ -30,7 +32,10 @@ from ragas.metrics import (
     SemanticSimilarity,
 )
 
-load_dotenv()
+# Load .envother (Gemini key) first, fallback to .env
+_repo_root = Path(__file__).parent.parent.parent
+load_dotenv(_repo_root / ".envother")
+load_dotenv(_repo_root / ".env")
 
 DATA_DIR = Path(__file__).parent / "data"
 CHUNK_SIZE = 256   # tokens (approximated as words for simplicity)
@@ -230,14 +235,15 @@ def generate_answer(question: str, contexts: list[str]) -> str:
 
 # ── RAGAS Scoring ─────────────────────────────────────────────────────────────
 
-RAGAS_METRICS = [
-    Faithfulness(),
-    ResponseRelevancy(),
-    ContextPrecision(),
-    ContextRecall(),
-    AnswerCorrectness(),
-    SemanticSimilarity(),
-]
+def _get_ragas_llm():
+    """Return a RAGAS-compatible LLM wrapper using Gemini."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise EnvironmentError(
+            "GEMINI_API_KEY not set. Add it to .envother in the repo root."
+        )
+    gemini = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key)
+    return LangchainLLMWrapper(gemini)
 
 
 def score_with_ragas(samples: list[dict]) -> dict:
@@ -246,15 +252,18 @@ def score_with_ragas(samples: list[dict]) -> dict:
         user_input, retrieved_contexts (list[str]), response, reference
     Returns dict of metric_name -> float score.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "OPENAI_API_KEY not set. Add it to your .env file. "
-            "See .env.example for the format."
-        )
+    judge_llm = _get_ragas_llm()
+    metrics = [
+        Faithfulness(llm=judge_llm),
+        ResponseRelevancy(llm=judge_llm),
+        ContextPrecision(llm=judge_llm),
+        ContextRecall(llm=judge_llm),
+        AnswerCorrectness(llm=judge_llm),
+        SemanticSimilarity(),  # embedding-only, no LLM needed
+    ]
 
     dataset = HFDataset.from_list(samples)
-    result = evaluate(dataset=dataset, metrics=RAGAS_METRICS)
+    result = evaluate(dataset=dataset, metrics=metrics)
     # result.scores is a list of per-sample dicts; average across samples
     scores = {}
     for metric_name in result.scores[0]:
