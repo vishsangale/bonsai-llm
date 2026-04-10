@@ -8,7 +8,8 @@ Usage:
     python eval_rag.py --dataset all
 """
 
-import os, json, argparse, textwrap
+import os, json, argparse, textwrap, warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="ragas")
 from pathlib import Path
 from dotenv import load_dotenv
 import wikipedia as wiki_api
