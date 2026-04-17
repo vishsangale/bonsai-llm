@@ -1,0 +1,5 @@
+deepeval
+inspect-ai
+transformers
+torch
+accelerate

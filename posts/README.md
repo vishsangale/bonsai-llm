@@ -1,7 +1,6 @@
 # Bonsai LLM — Posts
 
-Companion writing for the bonsai-llm lab. Each post comes in two flavors:
-- `newsletter.md` — conversational, first-person, Substack-ready
+Companion writing for the bonsai-llm lab. Each post comes as a:
 - `tutorial.md` — step-by-step, beginner-friendly walkthrough
 
 All code is self-contained and runnable with public models (no private checkpoints required).
